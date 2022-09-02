@@ -43,7 +43,7 @@ if (SCATTERED) {
 }
 %}
 
-COMPONENT broadcast = Event_broadcaster(id0="RING", id1="FEN", id2="TUBE", double0="charge_A", double1="charge_B")
+COMPONENT broadcast = Event_broadcaster(id0="RING", id1="FEN", id2="TUBE", double0="charge_A", double1="charge_B", ip="172.17.5.35")
 // None of the AT ... matters as the broadcaster accepts all events which have made it this far throug the instrument.
 AT(0,0,0.01) RELATIVE Detector ROTATED(0,0,0) RELATIVE Detector
 
