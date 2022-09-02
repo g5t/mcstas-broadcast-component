@@ -1,16 +1,20 @@
 DEFINE INSTRUMENT SimpleBroadcaster()
+
 DECLARE
 %{
 int cassette;
 int analyzer;
 %}
-USERVARS %{
+
+USERVARS
+%{
 double charge_A;
 double charge_B;
 int RING;
 int FEN;
 int TUBE;
 %}
+
 INITIALIZE
 %{
 
@@ -19,8 +23,8 @@ TRACE
 
 COMPONENT Origin = Progress_bar() AT (0,0,0) ABSOLUTE EXTEND
 %{
-  cassette = (int)rand01()*9;
-  analyzer = (int)rand01()*5;
+  cassette = (int)(rand01()*9);
+  analyzer = (int)(rand01()*5);
 %}
 
 COMPONENT Source = Source_simple(yheight = 0.1, xwidth = 0.1, dist = 1, focus_xw=0.1, focus_yh=0.1, E0=5, dE=4)
@@ -35,7 +39,7 @@ if (SCATTERED) {
   FEN = 1; // always 1 for BIFROST
   charge_A = rand01() * 255.0;
   charge_B = rand01() * 255.0;
-  printf("(%d, %d, %d) %7.3f %7.3f\n", RING, FEN, TUBE, charge_A, charge_B);
+  printf("(%2d, %2d, %2d) %7.3f %7.3f\n", RING, FEN, TUBE, charge_A, charge_B);
 }
 %}
 

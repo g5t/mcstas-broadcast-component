@@ -1,19 +1,28 @@
 DEFINE COMPONENT Event_broadcaster
 DEFINITION PARAMETERS()
 SETTING PARAMETERS (
-string id0 = 0;
-string id1 = 0;
-string id2 = 0;
-string double0 = 0;
-string double1 = 0;
+string id0 = 0,
+string id1 = 0,
+string id2 = 0,
+string double0 = 0,
+string double1 = 0
 )
 OUTPUT PARAMETERS ()
+
+SHARE
+%{
+  void throw_error(char* named, char* variable){
+    printf("Event_broadcaster: %s: Particle variable %s inaccessible, exiting.\n", named, variable);
+    exit(-1);
+  }
+  int particle_getvar_int(_class_particle* p, char* name){
+      double bits = particle_getvar(p, name, 0);
+      return *(int*)&bits;
+  }
+%}
+
 DECLARE
 %{
-void throw_error(char* named, char* variable){
-  printf("Event_broadcaster: %s: Particle variable %s inaccessible, exiting.\n", named, variable);
-  exit(-1);
-}
 // pre-declare the stateful object
 // ...
 // pre-declare values which are sent to the stateful object
@@ -23,6 +32,7 @@ int i2;
 double d0;
 double d1;
 %}
+
 INITIALIZE
 %{
 // Include the header file and run any initialization for the real broadcaster
@@ -30,32 +40,44 @@ INITIALIZE
 
 // Make sure the provided property names are accessible -- no error checking later
 int failure=0;
-i0 = (int) particle_getvar(_particle, id0, &failure);
+particle_getvar(_particle, id0, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, id0); 
 
-i1 = (int) particle_getvar(_particle, id1, &failure);
+particle_getvar(_particle, id1, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, id1); 
 
-i2 = (int) particle_getvar(_particle, id2, &failure);
+particle_getvar(_particle, id2, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, id2); 
 
-d0 = particle_getvar(_particle, double0, &failure);
+particle_getvar(_particle, double0, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, double0);
 
-d1 = particle_getvar(_particle, double1, &failure);
+particle_getvar(_particle, double1, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, double1);
 
 %}
+
 TRACE
 %{
-i0 = (int) particle_getvar(_particle, id0, 0);
-i1 = (int) particle_getvar(_particle, id1, 0);
-i2 = (int) particle_getvar(_particle, id2, 0);
+i0 = particle_getvar_int(_particle, id0);
+i1 = particle_getvar_int(_particle, id1);
+i2 = particle_getvar_int(_particle, id2);
 d0 = particle_getvar(_particle, double0, 0);
 d1 = particle_getvar(_particle, double1, 0);
 
 // Send the event to the broadcaster to be accumulated and broadcast
 
-printf("Accumulate (%d %d %d) %7.3f %7.3f %7.3f\n", i0, i1, i2, d0, d1, t);
+printf("Accumulate (%d %d %d) %7.3f %7.3f %11.9f\n", i0, i1, i2, d0, d1, t);
 
 %}
+
+FINALLY
+%{
+// perform any teardown of the stateful broadcaster
+%}
+
+MCDISPLAY
+%{
+%}
+
+END
