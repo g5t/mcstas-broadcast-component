@@ -8,9 +8,11 @@ string double0 = 0,
 string double1 = 0
 )
 OUTPUT PARAMETERS ()
-
+DEPENDENCY "-L. -lwrapper"
 SHARE
 %{
+#include "wrapper.h"
+
   void throw_error(char* named, char* variable){
     printf("Event_broadcaster: %s: Particle variable %s inaccessible, exiting.\n", named, variable);
     exit(-1);
@@ -19,12 +21,14 @@ SHARE
       double bits = particle_getvar(p, name, 0);
       return *(int*)&bits;
   }
+
 %}
 
 DECLARE
 %{
 // pre-declare the stateful object
-// ...
+bifrost_readout_t* bifrost;
+
 // pre-declare values which are sent to the stateful object
 int i0;
 int i1;
@@ -36,7 +40,9 @@ double d1;
 INITIALIZE
 %{
 // Include the header file and run any initialization for the real broadcaster
-// ...
+bifrost = bifrost_readout_create("127.0.0.1", 9000);
+bifrost_readout_setPulseTime(bifrost, 1, 0, 0, 0);
+bifrost_readout_newPacket(bifrost);
 
 // Make sure the provided property names are accessible -- no error checking later
 int failure=0;
@@ -55,6 +61,7 @@ if (failure) throw_error(NAME_CURRENT_COMP, double0);
 particle_getvar(_particle, double1, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, double1);
 
+
 %}
 
 TRACE
@@ -69,11 +76,16 @@ d1 = particle_getvar(_particle, double1, 0);
 
 printf("Accumulate (%d %d %d) %7.3f %7.3f %11.9f\n", i0, i1, i2, d0, d1, t);
 
+// actually calculte the correct time ...
+bifrost_readout_add(bifrost, (uint8_t)i0, (uint8_t)i1, (uint32_t)1, *(uint32_t*)&t, (uint8_t)i2, *(uint16_t*)&d0, *(uint16_t*)&d1);
+
 %}
 
 FINALLY
 %{
 // perform any teardown of the stateful broadcaster
+bifrost_readout_send(bifrost);
+bifrost_readout_destroy(bifrost);
 %}
 
 MCDISPLAY
