@@ -1,13 +1,15 @@
 DEFINE COMPONENT Event_broadcaster
 DEFINITION PARAMETERS()
 SETTING PARAMETERS (
-string id0 = 0,
-string id1 = 0,
-string id2 = 0,
-string double0 = 0,
-string double1 = 0,
+string ring = 0,
+string fen = 0,
+string tube = 0,
+string a = 0,
+string b = 0,
+string tof = "t",
 string ip = 0,
-int port = 9000
+int port = 9000,
+int broadcast = 1
 )
 OUTPUT PARAMETERS ()
 DEPENDENCY "-L. -lwrapper"
@@ -30,13 +32,6 @@ DECLARE
 %{
 // pre-declare the stateful object
 bifrost_readout_t* bifrost;
-
-// pre-declare values which are sent to the stateful object
-int i0;
-int i1;
-int i2;
-double d0;
-double d1;
 %}
 
 INITIALIZE
@@ -52,45 +47,57 @@ bifrost_readout_newPacket(bifrost);
 
 // Make sure the provided property names are accessible -- no error checking later
 int failure=0;
-particle_getvar(_particle, id0, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, id0); 
+particle_getvar(_particle, ring, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, ring); 
 
-particle_getvar(_particle, id1, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, id1); 
+particle_getvar(_particle, fen, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, fen); 
 
-particle_getvar(_particle, id2, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, id2); 
+particle_getvar(_particle, tube, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, tube); 
 
-particle_getvar(_particle, double0, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, double0);
+particle_getvar(_particle, a, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, a);
 
-particle_getvar(_particle, double1, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, double1);
+particle_getvar(_particle, b, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, b);
+
+particle_getvar(_particle, tof, &failure);
+if (failure) throw_error(NAME_CURRENT_COMP, tof);
 
 
 %}
 
 TRACE
 %{
-i0 = particle_getvar_int(_particle, id0);
-i1 = particle_getvar_int(_particle, id1);
-i2 = particle_getvar_int(_particle, id2);
-d0 = particle_getvar(_particle, double0, 0);
-d1 = particle_getvar(_particle, double1, 0);
+int int_ring = particle_getvar_int(_particle, ring);
+int int_fen = particle_getvar_int(_particle, fen);
+int int_tube = particle_getvar_int(_particle, tube);
+int int_A = particle_getvar_int(_particle, a);
+int int_B = particle_getvar_int(_particle, b);
+
+double double_tof = particle_getvar(_particle, tof, 0);
+
+// add error checking of int -> uintN_t values?
+uint8_t RING = (uint8_t)int_ring;
+uint8_t FEN = (uint8_t)int_fen;
+uint8_t TUBE = (uint8_t)int_tube;
+uint16_t A = (uint16_t)int_A;
+uint16_t B = (uint16_t)int_B;
+uint32_t HI = (uint32_t)double_tof; // seconds since 1970-01-01T00:00?
+uint32_t LO = (uint32_t)((double_tof - (double)HI)/1e-9); // ns since last second
+
+printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", RING, FEN, TUBE, A, B, HI, LO);
 
 // Send the event to the broadcaster to be accumulated and broadcast
-
-printf("Accumulate (%d %d %d) %7.3f %7.3f %11.9f\n", i0, i1, i2, d0, d1, t);
-
-// actually calculte the correct time ...
-bifrost_readout_add(bifrost, (uint8_t)i0, (uint8_t)i1, (uint32_t)1, *(uint32_t*)&t, (uint8_t)i2, *(uint16_t*)&d0, *(uint16_t*)&d1);
+if (broadcast) bifrost_readout_add(bifrost, RING, FEN, HI, LO, TUBE, A, B);
 
 %}
 
 FINALLY
 %{
 // perform any teardown of the stateful broadcaster
-bifrost_readout_send(bifrost);
+if (broadcast) bifrost_readout_send(bifrost);
 bifrost_readout_destroy(bifrost);
 %}
 

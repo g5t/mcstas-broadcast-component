@@ -1,15 +1,23 @@
-DEFINE INSTRUMENT SimpleBroadcaster()
+DEFINE INSTRUMENT SimpleBroadcaster(
+int sendPackets=0,
+int reuse=0,
+string address="127.0.0.1"
+//"172.17.5.35"
+)
 
 DECLARE
 %{
+char sendTo[256];
+char store_or_replay[10];
+
 int cassette;
 int analyzer;
 %}
 
 USERVARS
 %{
-double charge_A;
-double charge_B;
+int charge_A;
+int charge_B;
 int RING;
 int FEN;
 int TUBE;
@@ -17,6 +25,13 @@ int TUBE;
 
 INITIALIZE
 %{
+if (address == 0 || address[0] == '\0'){
+  strcpy(sendTo, "127.0.0.1");
+} else {
+  strcpy(sendTo, address);
+}
+
+strcpy(store_or_replay, (reuse ? "replay": "store"));
 
 %}
 TRACE
@@ -28,24 +43,35 @@ COMPONENT Origin = Progress_bar() AT (0,0,0) ABSOLUTE EXTEND
 %}
 
 COMPONENT Source = Source_simple(yheight = 0.1, xwidth = 0.1, dist = 1, focus_xw=0.1, focus_yh=0.1, E0=5, dE=4)
-AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
+WHEN !reuse AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
 
 COMPONENT Detector = PSD_monitor(nx=100, ny=100, filename="psd.dat", xwidth=0.1, yheight=0.1)
-AT (0,0,1) RELATIVE Source ROTATED (0,0,0) RELATIVE Source
+WHEN !reuse AT (0,0,1) RELATIVE Source ROTATED (0,0,0) RELATIVE Source
 EXTEND %{
 if (SCATTERED) {
   RING = analyzer / 3; // triplet//3;
   TUBE = 3 * cassette + (analyzer - 3 * RING); // 3*arc + triplet%3;
   FEN = 1; // always 1 for BIFROST
-  charge_A = rand01() * 255.0;
-  charge_B = rand01() * 255.0;
-  printf("(%2d, %2d, %2d) %7.3f %7.3f\n", RING, FEN, TUBE, charge_A, charge_B);
+  charge_A = (int)(rand01() * 65535);
+  charge_B = (int)(rand01() * 65535);
+  printf("(%2d %2d %2d) %5d %5d\n", RING, FEN, TUBE, charge_A, charge_B);
 }
 %}
 
-COMPONENT broadcast = Event_broadcaster(id0="RING", id1="FEN", id2="TUBE", double0="charge_A", double1="charge_B", ip="172.17.5.35")
-// None of the AT ... matters as the broadcaster accepts all events which have made it this far throug the instrument.
-AT(0,0,0.01) RELATIVE Detector ROTATED(0,0,0) RELATIVE Detector
+// Store/Retreive the particles *before* deciding if each should be used as an event.
+// Then we can (re)use the same probability rays to 'fill' an event stream over time
+// e.g., `mcrun broadcaster.instr -n 10000 reuse=0 sendPackets=0` to create the stored rays
+//       `mcrun broadcaster.instr -n 1000000 reuse=1` to replay the 1e4 rays 100 times, creating events
+COMPONENT store_events = Store_Replay(mode=store_or_replay)
+AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
+
+// The scale is set entirely empirically at present. Events at this point have p~=0.79
+COMPONENT to_events = Probability_to_Event(scale=2, mode="p")
+WHEN !reuse AT (0,0,0.005) RELATIVE Detector ROTATED (0,0,0) RELATIVE Detector
+
+COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets)
+// None of the AT ... matters as the broadcaster accepts all events which have made it this far through the instrument.
+AT(0,0,0) RELATIVE Detector ROTATED (0,0,0) RELATIVE Origin
 
 FINALLY
 %{

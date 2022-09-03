@@ -1,0 +1,45 @@
+DEFINE COMPONENT Probability_to_Event
+DEFINITION PARAMETERS()
+SETTING PARAMETERS (
+scale=1,
+string mode = 0
+)
+OUTPUT PARAMETERS ()
+SHARE
+%{
+%}
+
+DECLARE
+%{
+int choice;
+%}
+
+INITIALIZE
+%{
+choice = (mode == 0 || mode[0] == '\0' || !strcmp("p", mode)) ? 0 : !strcmp("p^2", mode) ? 1 : -1;
+
+if (choice < 0){
+  printf("Unrecognized operation mode '%s'. Consider expanding options?\n", mode);
+  choice = 0;
+}
+
+%}
+
+TRACE
+%{
+if (rand01()*scale < (choice ? p*p : p)) {
+  SCATTER;
+} else {
+  ABSORB;
+}
+%}
+
+FINALLY
+%{
+%}
+
+MCDISPLAY
+%{
+%}
+
+END

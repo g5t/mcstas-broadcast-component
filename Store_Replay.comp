@@ -1,0 +1,99 @@
+DEFINE COMPONENT Store_Replay
+DEFINITION PARAMETERS()
+SETTING PARAMETERS (
+string mode = 0,
+string filename = 0,
+int max_particles = 0
+)
+OUTPUT PARAMETERS ()
+SHARE
+%{
+%}
+
+DECLARE
+%{
+int choice;
+_class_particle* store;
+size_t current;
+%}
+
+INITIALIZE
+%{
+if (mode == 0 || mode[0] == '\0') {
+  choice = 0;
+} else {
+  choice = !strcmp("replay", mode) ? 1 : 0;
+}
+
+if (!max_particles) max_particles = (int)mcget_ncount();
+
+if (!filename || filename[0] == '\0') sprintf(filename, "%s.lst", NAME_CURRENT_COMP);
+
+store = calloc(max_particles, sizeof(_class_particle));
+if (choice == 1){
+  // Load the store from the specified file
+	FILE* store_file = fopen(filename, "rb");
+	if (store_file == NULL){
+		printf("Store_Replay: %s: File Error %s is not readable\n", NAME_CURRENT_COMP, filename);
+		exit(-1);
+	}
+	// Obtain the file size:
+	fseek(store_file, 0, SEEK_END);
+	long file_size = ftell(store_file);
+	rewind(store_file);
+  // Ensure we can store all particles contained
+	size_t num = (size_t)(file_size / sizeof(_class_particle));
+	if (num > (size_t) max_particles) num = (size_t) max_particles;
+	if (num < (size_t) max_particles) max_particles = (int) num;
+
+  // Read the full file at once
+	size_t count = fread(store, sizeof(_class_particle), num, store_file);
+	// And check that the read amount is right
+	if (count != num){
+    printf("Store_Replay: %s: File IO Error: Expected to read %d particles but read %u instead!\n", NAME_CURRENT_COMP, num, count);
+		exit(-1);
+	}
+	fclose(store_file);
+}
+// Set the current particle counter to zero
+current = 0;
+%}
+
+TRACE
+%{
+if (current >= max_particles) {
+  printf("Store_Replay: %s: Maximum particle count %d exeeded, rewinding to zero!\n", NAME_CURRENT_COMP, max_particles);
+	current = 0;
+}
+if (choice) {
+ // Set the current particle to the next one in the store
+ *_particle = store[current++];
+} else {
+ // Place the current particle into the store
+ store[current++] = *_particle;
+}
+%}
+
+SAVE
+%{
+if (choice == 0) {
+  // Save the store to the specified file
+	FILE * store_file_out = fopen(filename, "wb");
+	size_t count = fwrite(store, sizeof(_class_particle), current, store_file_out);
+	if (count != current){
+    printf("Store_Replay: %s: Error writing storage file!\n", NAME_CURRENT_COMP);
+	}
+  fclose(store_file_out);
+}
+%}
+
+FINALLY
+%{
+if (store) free(store);
+%}
+
+MCDISPLAY
+%{
+%}
+
+END
