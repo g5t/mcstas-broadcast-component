@@ -9,12 +9,15 @@ string b = 0,
 string tof = "t",
 string ip = 0,
 int port = 9000,
-int broadcast = 1
+int broadcast = 1,
+pulse_rate = 14
 )
 OUTPUT PARAMETERS ()
 DEPENDENCY "-L. -lwrapper"
 SHARE
 %{
+#include <sys/time.h>
+#include <stdlib.h>
 #include "wrapper.h"
 
   void throw_error(char* named, char* variable){
@@ -26,12 +29,33 @@ SHARE
       return *(int*)&bits;
   }
 
+  // clock_gettime requires C11?
+  /*
+  uint64_t now_in_sec_88MHz() {
+    struct timespec spec;
+    if (clock_gettime(1, &spec) == -1) abort(); // not CLOCK_MONOTONIC
+    uint64_t hi = ((uint64_t)spec.tv_sec) << 32;
+    uint64_t lo = (uint32_t)((uint64_t)te.tv_usec * 88 / 1000);
+    return hi + lo;
+  }
+  */
+  // gettimeofday is deprecated, but still working
+  uint64_t now_in_sec_88MHz() {
+    struct timeval te;
+    gettimeofday(&te, NULL);
+    uint64_t hi = ((uint64_t) te.tv_sec) << 32;
+    uint64_t lo = (uint32_t)(te.tv_usec * 88);
+    return hi + lo;
+  }
+
 %}
 
 DECLARE
 %{
 // pre-declare the stateful object
 bifrost_readout_t* bifrost;
+uint64_t last_time;
+uint64_t pulse_repetition_time;
 %}
 
 INITIALIZE
@@ -65,11 +89,23 @@ if (failure) throw_error(NAME_CURRENT_COMP, b);
 particle_getvar(_particle, tof, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, tof);
 
-
+last_time = now_in_sec_88MHz();
+pulse_repetition_time = (uint64_t)(88e6/pulse_rate); // units of (1/88MHz)
 %}
 
 TRACE
 %{
+uint64_t now_time = now_in_sec_88MHz();
+if (now_time - last_time > pulse_repetition_time) {
+  // send a new source-time packet
+  uint32_t source_high = now_time >> 32;
+  uint32_t source_low = now_time;
+  printf("Event_broadcaster: %s: Send new pulse time packet for (%lu, %lu) \n", NAME_CURRENT_COMP, source_high, source_low); 
+  if (broadcast) bifrost_readout_setPulseTime(bifrost, source_high, source_low, (uint32_t)(last_time >> 32), (uint32_t)(last_time));
+  // update the stored source time for the next packet
+  last_time = now_time;
+} 
+
 int int_ring = particle_getvar_int(_particle, ring);
 int int_fen = particle_getvar_int(_particle, fen);
 int int_tube = particle_getvar_int(_particle, tube);
@@ -85,7 +121,8 @@ uint8_t TUBE = (uint8_t)int_tube;
 uint16_t A = (uint16_t)int_A;
 uint16_t B = (uint16_t)int_B;
 uint32_t HI = (uint32_t)double_tof; // seconds since 1970-01-01T00:00?
-uint32_t LO = (uint32_t)((double_tof - (double)HI)/1e-9); // ns since last second
+uint64_t ns = (uint64_t)((double_tof - (double)HI)/1e-9); // ns since last second
+uint32_t LO = (uint32_t)(ns * 88 / 1000); // # 88MHz ticks since last second ... which isn't quite right
 
 printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", RING, FEN, TUBE, A, B, HI, LO);
 
