@@ -17,7 +17,7 @@ extern "C" {
 
     std::string string_address(address);
 
-    br = (typeof(br))malloc(sizeof(*br));
+    br = (bifrost_readout_t*)malloc(sizeof(*br));
     obj = new BifrostReadout(string_address, port);
     br->obj = obj;
 
@@ -34,7 +34,7 @@ extern "C" {
   // Add a readout value to the transmission buffer of the BIFROST Readout object
   // Automatically transmits the packet if it is full.
   void bifrost_readout_add(
-      bifrost_readout_t* br, uint8_t ring, uint8_t fen, 
+      bifrost_readout_t* br, uint8_t ring, uint8_t fen,
       uint32_t time_high, uint32_t time_low,
       uint8_t tube, uint16_t amplitude_a, uint16_t amplitude_b
   )
@@ -55,7 +55,7 @@ extern "C" {
   }
   // Update the pulse and previous pulse times for the BIFROST Readout object
   void bifrost_readout_setPulseTime(
-      bifrost_readout_t* br, uint32_t pulse_high, uint32_t pulse_low, 
+      bifrost_readout_t* br, uint32_t pulse_high, uint32_t pulse_low,
       uint32_t prev_high, uint32_t prev_low
   )
   {
@@ -72,7 +72,7 @@ extern "C" {
     obj = static_cast<BifrostReadout*>(br->obj);
     obj->newPacket();
   }
-  // 
+  //
 #ifdef __cplusplus
 }
 #endif
