@@ -49,9 +49,9 @@ COMPONENT Detector = PSD_monitor(nx=100, ny=100, filename="psd.dat", xwidth=0.1,
 WHEN !reuse AT (0,0,1) RELATIVE Source ROTATED (0,0,0) RELATIVE Source
 EXTEND %{
 if (SCATTERED) {
-  RING = analyzer / 3; // triplet//3;
-  TUBE = 3 * cassette + (analyzer - 3 * RING); // 3*arc + triplet%3;
-  FEN = 1; // always 1 for BIFROST
+  RING = cassette / 3;
+  TUBE = (cassette - 3*RING)*5 + analyzer;
+  FEN = 0; // always 0 for BIFROST
   charge_A = (int)(rand01() * 65535);
   charge_B = (int)(rand01() * 65535);
   printf("(%2d %2d %2d) %5d %5d\n", RING, FEN, TUBE, charge_A, charge_B);
@@ -65,9 +65,9 @@ if (SCATTERED) {
 COMPONENT store_events = Store_Replay(mode=store_or_replay)
 AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
 
-// The scale is set entirely empirically at present. Events at this point have p~=0.79
-COMPONENT to_events = Probability_to_Event(scale=2, mode="p")
-WHEN !reuse AT (0,0,0.005) RELATIVE Detector ROTATED (0,0,0) RELATIVE Detector
+//// The scale is set entirely empirically at present. Events at this point have p~=0.79
+//COMPONENT to_events = Probability_to_Event(scale=2, mode="p")
+//WHEN !reuse AT (0,0,0.005) RELATIVE Detector ROTATED (0,0,0) RELATIVE Detector
 
 COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets)
 // None of the AT ... matters as the broadcaster accepts all events which have made it this far through the instrument.
