@@ -2,11 +2,79 @@ DEFINE COMPONENT Probability_to_Event
 DEFINITION PARAMETERS()
 SETTING PARAMETERS (
 scale=1,
-string mode = 0
+string mode = 0,
+int variables = 0,
+string v0 = 0,
+string v1 = 0,
+string v2 = 0,
+string v3 = 0,
+string v4 = 0,
+string v5 = 0,
+string v6 = 0,
+string v7 = 0,
+string v8 = 0,
+v0min = 0,
+v0max = 0,
+v1min = 0,
+v1max = 0,
+v2min = 0,
+v2max = 0,
+v3min = 0,
+v3max = 0,
+v4min = 0,
+v4max = 0,
+v5min = 0,
+v5max = 0,
+v6min = 0,
+v6max = 0,
+v7min = 0,
+v7max = 0,
+v8min = 0,
+v8max = 0,
+string v0type = 0,
+string v1type = 0,
+string v2type = 0,
+string v3type = 0,
+string v4type = 0,
+string v5type = 0,
+string v6type = 0,
+string v7type = 0,
+string v8type = 0,
+noise_level = 0.1
 )
 OUTPUT PARAMETERS ()
 SHARE
 %{
+  int p2e_particle_setvar_int(_class_particle* p, char* name, int value){
+    return particle_setvar_void(p, name, (void*)&value);
+  }
+  int p2e_particle_setvar_double(_class_particle* p, char* name, double value){
+    return particle_setvar_void(p, name, (void*)&value);
+  }
+  int p2e_particle_checkvar(_class_particle* p, char* name){
+    int status=0;
+    particle_getvar(_particle, name, &status);
+    return status;
+  }
+  void p2e_init_checkvar(char* component, _class_particle* p, char* name, double min, double max){
+    if (p2e_particle_checkvar(p, name)) {
+      printf("Probability_to_Event=%s: Particle variable %s inaccessible, exiting.\n", component, name);
+      exit(-1);
+    }
+    if (min == max) printf("Probability_to_Event=%s: Warning de-selected noise events will all have %s=%d\n", component, name, min);
+  }
+  void p2e_randvar_int(_class_particle* this, char* name, double min, double max){
+    int value = (int)(rand01() * (max - min)) + (int)min;
+    p2e_particle_setvar_int(this, name, value);
+  }
+  void p2e_randvar_double(_class_particle* this, char* name, double min, double max){
+    double value = (rand01() * (max - min)) + min;
+    p2e_particle_setvar_double(this, name, value);
+  }
+  void p2e_randvar_type(_class_particle* this, char* name, char* typ, double min, double max){
+    if (typ && !strcmp(typ, "double")) return p2e_randvar_double(this, name, min, max);
+    return p2e_randvar_int(this, name, min, max);
+  }
 %}
 
 DECLARE
@@ -23,11 +91,40 @@ if (choice < 0){
   choice = 0;
 }
 
+
+// Make sure the provided variable names are accessible, and that the provided value ranges make sense
+if (variables > 0) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v0, v0min, v0max);
+if (variables > 1) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v1, v1min, v1max);
+if (variables > 2) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v2, v2min, v2max);
+if (variables > 3) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v3, v3min, v3max);
+if (variables > 4) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v4, v4min, v4max);
+if (variables > 5) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v5, v5min, v5max);
+if (variables > 6) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v6, v6min, v6max);
+if (variables > 7) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v7, v7min, v7max);
+if (variables > 8) p2e_init_checkvar(NAME_CURRENT_COMP, _particle, v8, v8min, v8max);
+
 %}
 
 TRACE
 %{
-if (rand01()*scale < (choice ? p*p : p)) {
+double r = rand01() * scale;
+double v = choice ? p*p : p;
+v *= (double)mcget_ncount();
+if (r < v) {
+  SCATTER;
+} else if(rand01() < noise_level) {
+  printf("Random noise after %f > %f for scattering\n", r, v);
+  // randomize the specified variables
+  if (variables > 0) p2e_randvar_type(_particle, v0, v0type,  v0min, v0max);
+  if (variables > 1) p2e_randvar_type(_particle, v1, v1type,  v1min, v1max);
+  if (variables > 2) p2e_randvar_type(_particle, v2, v2type,  v2min, v2max);
+  if (variables > 3) p2e_randvar_type(_particle, v3, v3type,  v3min, v3max);
+  if (variables > 4) p2e_randvar_type(_particle, v4, v4type,  v4min, v4max);
+  if (variables > 5) p2e_randvar_type(_particle, v5, v5type,  v5min, v5max);
+  if (variables > 6) p2e_randvar_type(_particle, v6, v6type,  v6min, v6max);
+  if (variables > 7) p2e_randvar_type(_particle, v7, v7type,  v7min, v7max);
+  if (variables > 8) p2e_randvar_type(_particle, v8, v8type,  v8min, v8max);
+  // claim that an interaction took place
   SCATTER;
 } else {
   ABSORB;
