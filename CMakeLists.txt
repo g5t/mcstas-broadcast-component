@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 
-project("mcstas-udp-transmit" C CXX)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+project("mcstas-udp-transmit" CXX)
 
 include_directories(.)
 
-add_library(wrapper SHARED)
-target_sources(wrapper PRIVATE wrapper.cpp BifrostReadout.cpp wrapper.h BifrostReadout.h)
+add_library(wrapper SHARED wrapper.cpp wrapper.h BifrostReadout.cpp BifrostReadout.h)
+set_target_properties(wrapper PROPERTIES SUFFIX ".so")
 
+set_property(TARGET wrapper PROPERTY CXX_STANDARD 11)
+
+add_custom_target(copylib
+  COMMAND ${CMAKE_COMMAND} -E copy libwrapper.so ..
+  )
+
+add_custom_target(runsim
+    COMMAND mcrun "broadcaster.instr" "-n" "100000" "--no-output" "sendPackets=1"
+    DEPENDS wrapper copylib
+    WORKING_DIRECTORY ..
+    COMMENT "Running McStas simulation")
