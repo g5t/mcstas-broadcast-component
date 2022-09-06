@@ -54,7 +54,7 @@ if (SCATTERED) {
   FEN = 0; // always 0 for BIFROST
   charge_A = (int)(rand01() * 10000);
   charge_B = (int)(rand01() * 10000);
-  printf("(%2d %2d %2d) %5d %5d\n", RING, FEN, TUBE, charge_A, charge_B);
+//  printf("(%2d %2d %2d) %5d %5d\n", RING, FEN, TUBE, charge_A, charge_B);
 }
 %}
 
