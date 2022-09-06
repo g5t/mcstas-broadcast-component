@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
-
 project("mcstas-udp-transmit" CXX)
+
+set(CMAKE_MACOSX_RPATH OFF)
 
 include_directories(.)
 
