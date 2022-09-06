@@ -10,12 +10,8 @@ set_target_properties(wrapper PROPERTIES SUFFIX ".so")
 
 set_property(TARGET wrapper PROPERTY CXX_STANDARD 11)
 
-add_custom_target(copylib
-  COMMAND ${CMAKE_COMMAND} -E copy libwrapper.so ..
-  )
-
 add_custom_target(runsim
     COMMAND mcrun "broadcaster.instr" "-n" "100000" "--no-output" "sendPackets=1"
-    DEPENDS wrapper copylib
+    DEPENDS wrapper
     WORKING_DIRECTORY ..
     COMMENT "Running McStas simulation")

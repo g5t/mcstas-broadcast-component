@@ -13,7 +13,7 @@ int broadcast = 1,
 pulse_rate = 14
 )
 OUTPUT PARAMETERS ()
-DEPENDENCY "-L. -lwrapper"
+DEPENDENCY "-L. -Lbuild -lwrapper"
 SHARE
 %{
 #include <sys/time.h>
@@ -24,7 +24,7 @@ SHARE
 #include <unistd.h>
 
   void delay() {
-	for (int i=0; i<300; ++i) sleep(0.1); 
+	for (int i=0; i<300; ++i) sleep(0.1);
 	}
 
   struct efu_time {
@@ -127,13 +127,13 @@ bifrost_readout_newPacket(bifrost);
 // Make sure the provided property names are accessible -- no error checking later
 int failure=0;
 particle_getvar(_particle, ring, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, ring); 
+if (failure) throw_error(NAME_CURRENT_COMP, ring);
 
 particle_getvar(_particle, fen, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, fen); 
+if (failure) throw_error(NAME_CURRENT_COMP, fen);
 
 particle_getvar(_particle, tube, &failure);
-if (failure) throw_error(NAME_CURRENT_COMP, tube); 
+if (failure) throw_error(NAME_CURRENT_COMP, tube);
 
 particle_getvar(_particle, a, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, a);
