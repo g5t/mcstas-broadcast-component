@@ -1,4 +1,5 @@
 #include <string>
+
 #include "BifrostReadout.h"
 #include "wrapper.h"
 
@@ -72,6 +73,7 @@ extern "C" {
     obj = static_cast<BifrostReadout*>(br->obj);
     obj->newPacket();
   }
+
   // 
 #ifdef __cplusplus
 }

@@ -18,7 +18,79 @@ SHARE
 %{
 #include <sys/time.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "wrapper.h"
+
+#include <unistd.h>
+
+  void delay() {
+	for (int i=0; i<300; ++i) sleep(0.1); 
+	}
+
+  struct efu_time {
+    uint32_t hi;
+    uint32_t lo;
+  };
+  typedef struct efu_time efu_time_t;
+
+  efu_time_t efu_now(){
+    efu_time_t out;
+    out.hi = 0;
+    out.lo = 0;
+    return out;
+  }
+  efu_time_t efu_add(efu_time_t a, efu_time_t b){
+    efu_time_t out;
+    out.hi = a.hi + b.hi;
+    uint64_t r = (uint64_t)a.lo + (uint64_t)b.lo;
+    uint64_t m = 88052499;
+    if (r > m) {
+      out.hi += 1u;
+      r -= m;
+    }
+    out.lo = (uint32_t)r;
+    return out;
+  }
+  efu_time_t efu_sub(efu_time_t a, efu_time_t b){
+    efu_time_t out;
+    out.hi = a.hi - b.hi;
+    uint64_t r;
+    if (a.lo < b.lo) {
+      r = (uint64_t)a.lo - (uint64_t)b.lo;
+    } else {
+      out.hi -= 1u;
+      r = ((uint64_t)88052499 + (uint64_t)a.lo) - (uint64_t)b.lo;
+    }
+    out.lo = (uint32_t)r;
+    return out;
+  }
+  int efu_compare(efu_time_t a, efu_time_t b){
+	  int out=0;
+		if (a.hi > b.hi || a.hi < b.hi) {
+		  out = a.hi > b.hi ? 1 : -1;
+		} else if (a.lo > b.lo || a.lo < b.lo) {
+		  out = a.lo > b.lo ? 1 : -1;
+		}
+		return out;
+  }
+  efu_time_t efu_from_double(double a){
+    efu_time_t out;
+    out.hi = (uint32_t)a;
+    double r = a - (double)out.hi;
+    out.lo = (uint32_t)(r * 88052499);
+    return out;
+  }
+  efu_time_t now_in_sec_88MHz() {
+    struct timeval te;
+    gettimeofday(&te, NULL);
+    efu_time_t out;
+    out.hi = (uint32_t)te.tv_sec;
+    uint64_t r = (uint64_t) te.tv_usec * (uint64_t) 88052499;
+    out.lo = (uint32_t)(r/(uint64_t)(1000000));
+    return out;
+  }
+
+
 
   void throw_error(char* named, char* variable){
     printf("Event_broadcaster: %s: Particle variable %s inaccessible, exiting.\n", named, variable);
@@ -29,34 +101,16 @@ SHARE
       return *(int*)&bits;
   }
 
-  // clock_gettime requires C11?
-  /*
-  uint64_t now_in_sec_88MHz() {
-    struct timespec spec;
-    if (clock_gettime(1, &spec) == -1) abort(); // not CLOCK_MONOTONIC
-    uint64_t hi = ((uint64_t)spec.tv_sec) << 32;
-    uint64_t lo = (uint32_t)((uint64_t)te.tv_usec * 88 / 1000);
-    return hi + lo;
-  }
-  */
-  // gettimeofday is deprecated, but still working
-  uint64_t now_in_sec_88MHz() {
-    struct timeval te;
-    gettimeofday(&te, NULL);
-    uint64_t hi = ((uint64_t) te.tv_sec) << 32;
-    uint64_t lo = (uint32_t)(te.tv_usec * 88);
-    return hi + lo;
-  }
-
 %}
 
 DECLARE
 %{
 // pre-declare the stateful object
 bifrost_readout_t* bifrost;
-uint64_t last_time;
-uint64_t pulse_repetition_time;
-uint64_t events;
+efu_time_t last_time;
+efu_time_t repetition_time;
+efu_time_t offset_time;
+efu_time_t now_time;
 %}
 
 INITIALIZE
@@ -91,30 +145,42 @@ particle_getvar(_particle, tof, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, tof);
 
 last_time = now_in_sec_88MHz();
-pulse_repetition_time = (uint64_t)(88e6/pulse_rate); // units of (1/88MHz)
+offset_time.hi = 0;
+offset_time.lo = 0;
+repetition_time = efu_from_double(1/pulse_rate);
 
-events = 0;
+printf("pulse rate set to %"PRIu32 " %"PRIu32"\n", repetition_time.hi, repetition_time.lo);
+
+bifrost_readout_setPulseTime(bifrost, last_time.hi, last_time.lo, 0, 0);
+
 %}
 
 TRACE
 %{
-uint64_t now_time = now_in_sec_88MHz();
+delay();
+now_time = now_in_sec_88MHz();
 /*
- * The EFU can not accept events which have decreasing event times.
+ * The EFU can not accept events which have decreasing event times?
  * One could try to implement a buffer that sorts event time to avoid this problem, but that seems complicated.
  * Instead, add the N*pulse-repetition-time to each event to (hopefully) avoid this issue.
 */
-now_time += pulse_repetition_time * events++;
+// offset_time = efu_add(offset_time, repetition_time);
+// now_time = efu_add(now_time, offset_time);
 
-if (now_time - last_time > pulse_repetition_time) {
-  // send a new source-time packet
-  uint32_t source_high = now_time >> 32;
-  uint32_t source_low = now_time;
-  printf("Event_broadcaster: %s: Send new pulse time packet for (%lu, %lu) \n", NAME_CURRENT_COMP, source_high, source_low); 
-  if (broadcast) bifrost_readout_setPulseTime(bifrost, source_high, source_low, (uint32_t)(last_time >> 32), (uint32_t)(last_time));
-  // update the stored source time for the next packet
+// If the time difference exceeds the pulse-period, send the old packet, create a new one, and add the pulse times
+if (efu_compare(now_time, efu_add(last_time, repetition_time)) == 1) {
+  efu_time_t r = now_in_sec_88MHz();
+
+  printf("Event_broadcaster=%s: Send packet, update time to (%"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32")\n",
+	       NAME_CURRENT_COMP, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
+  if (broadcast){
+	  // TODO combine these three into a single 'flush' call?
+	  bifrost_readout_send(bifrost);
+		bifrost_readout_newPacket(bifrost);
+	  bifrost_readout_setPulseTime(bifrost, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
+	}
   last_time = now_time;
-} 
+}
 
 int int_ring = particle_getvar_int(_particle, ring);
 int int_fen = particle_getvar_int(_particle, fen);
@@ -130,15 +196,15 @@ uint8_t FEN = (uint8_t)int_fen;
 uint8_t TUBE = (uint8_t)int_tube;
 uint16_t A = (uint16_t)int_A;
 uint16_t B = (uint16_t)int_B;
-uint32_t HI = (uint32_t)(now_time >> 32) + (uint32_t)double_tof; // seconds since 1970-01-01T00:00?
-uint64_t ns = (uint64_t)((double_tof - (double)HI)/1e-9); // ns since last second
-uint32_t LO = (uint32_t)(now_time) + (uint32_t)(ns * 88 / 1000); // # 88MHz ticks since last second ... which isn't quite right
 
-printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", RING, FEN, TUBE, A, B, HI, LO);
+
+efu_time_t efu_tof = efu_from_double(double_tof);
+efu_time_t event_time = efu_add(now_time, efu_tof);
+
+//printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", RING, FEN, TUBE, A, B, event_time.hi, event_time.lo);
 
 // Send the event to the broadcaster to be accumulated and broadcast
-if (broadcast) bifrost_readout_add(bifrost, RING, FEN, HI, LO, TUBE, A, B);
-
+if (broadcast) bifrost_readout_add(bifrost, RING, FEN, event_time.hi, event_time.lo, TUBE, A, B);
 %}
 
 FINALLY
