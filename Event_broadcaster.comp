@@ -16,6 +16,8 @@ OUTPUT PARAMETERS ()
 DEPENDENCY "-L. -Lbuild -lwrapper"
 SHARE
 %{
+#include <signal.h>
+#include <unistd.h> // for execve
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -111,6 +113,8 @@ efu_time_t last_time;
 efu_time_t repetition_time;
 efu_time_t offset_time;
 efu_time_t now_time;
+//
+int child_pid;
 %}
 
 INITIALIZE
@@ -152,6 +156,14 @@ repetition_time = efu_from_double(1/pulse_rate);
 printf("pulse rate set to %"PRIu32 " %"PRIu32"\n", repetition_time.hi, repetition_time.lo);
 
 bifrost_readout_setPulseTime(bifrost, last_time.hi, last_time.lo, 0, 0);
+
+child_pid = fork();
+if (0 == child_pid) {
+  // This *is* the child, change the execution stack
+	char * args[] = {NULL};
+	char * envs[] = {NULL};
+	execve("./waiter", args, envs);
+}
 
 %}
 
@@ -212,6 +224,28 @@ FINALLY
 // perform any teardown of the stateful broadcaster
 if (broadcast) bifrost_readout_send(bifrost);
 bifrost_readout_destroy(bifrost);
+
+if (child_pid) {
+	printf("Event_broadcaster=%s: Stopping child with pid %d\n", NAME_CURRENT_COMP, child_pid);
+  // See if the child exists *and* we are allowed to ask the child to stop
+	int res = kill(child_pid, 0);
+	if (!res){ // no error, no-signal succeeded
+	  res = kill(child_pid, SIGTERM);
+		if (!kill(child_pid, 0)){
+		  printf("Sent SIGTERM, waiting for wrap-up\n");
+			sleep(1);
+		  res = kill(child_pid, SIGTERM);
+			sleep(1);
+		}
+		res = kill(child_pid, 0);
+	}
+	if (!res){ // only true if SIGTERM failed
+	  res = kill(child_pid, SIGKILL);
+	}
+	if (!res) printf("Child with PID %d refuses to halt?\n", child_pid);
+}
+
+
 %}
 
 MCDISPLAY
