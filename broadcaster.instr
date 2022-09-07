@@ -51,11 +51,13 @@ COMPONENT Detector = PSD_monitor(nx=100, ny=100, filename="psd.dat", xwidth=0.1,
 WHEN !reuse AT (0,0,1) RELATIVE Source ROTATED (0,0,0) RELATIVE Source
 EXTEND %{
 if (SCATTERED) {
-  RING = cassette / 3;
-  TUBE = (cassette - 3*RING) + 3*analyzer;
+  RING = (int)(rand01()*2) + 2*(int)(cassette / 3); // RING is (0,1) (2,3), (4,5) for 0, 1, 2
+  TUBE = (cassette - 3*(int)(cassette/3)) + 3*analyzer;
   FEN = 0; // always 0 for BIFROST
-  charge_A = (int)(rand01() * 10000);
-  charge_B = (int)(rand01() * 10000);
+  int total_charge = (int)(rand01() * 10000);
+  double division = rand01();
+  charge_A = (int)(total_charge * division);
+  charge_B = (int)(total_charge * (1-division));
   printf("(%2d %2d %2d) %5d %5d\n", RING, FEN, TUBE, charge_A, charge_B);
 }
 %}
@@ -80,7 +82,10 @@ COMPONENT to_events = Probability_to_Event(
   )
 WHEN !reuse AT (0,0,0.005) RELATIVE Detector ROTATED (0,0,0) RELATIVE Detector
 
-COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets)
+COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets,
+  receiver="/home/g/Code/event-formation-unit/build/bin/efu",
+  options="--det /home/g/Code/event-formation-unit/build/modules/bifrost.so --nohwcheck --cmdport 10888"
+)
 // None of the AT ... matters as the broadcaster accepts all events which have made it this far through the instrument.
 AT(0,0,0) RELATIVE Detector ROTATED (0,0,0) RELATIVE Origin
 

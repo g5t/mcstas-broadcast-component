@@ -10,18 +10,36 @@ string tof = "t",
 string ip = 0,
 int port = 9000,
 int broadcast = 1,
-pulse_rate = 14
+pulse_rate = 14,
+string receiver = 0,
+string options = 0,
+string filename = 0,
+int hdf5_output = 1,
+int start_receiver = 1,
+int verbose=0
 )
 OUTPUT PARAMETERS ()
 DEPENDENCY "-L. -Lbuild -lwrapper"
 SHARE
 %{
+#include <signal.h>
+#include <unistd.h> // for execve
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include "wrapper.h"
-
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
+
+  int pid_dead(int pid){
+    struct stat sts;
+    char buffer[100];
+    sprintf(buffer, "/proc/%d", pid);
+    if (stat(buffer, &sts) == -1 && errno == ENOENT) return 1;
+    return 0;
+  }
 
   void delay() {
 	for (int i=0; i<300; ++i) sleep(0.1);
@@ -111,6 +129,8 @@ efu_time_t last_time;
 efu_time_t repetition_time;
 efu_time_t offset_time;
 efu_time_t now_time;
+//
+int child_pid;
 %}
 
 INITIALIZE
@@ -144,6 +164,83 @@ if (failure) throw_error(NAME_CURRENT_COMP, b);
 particle_getvar(_particle, tof, &failure);
 if (failure) throw_error(NAME_CURRENT_COMP, tof);
 
+if (broadcast && start_receiver && (!ip || !strcmp(ip, "127.0.0.1") || !strcmp(ip, "localhost"))){
+  // no-ip --> 127.0.0.1 above
+  // For localhost/127.0.0.1 we should start the server 
+  char outfile[PATH_MAX];
+  getcwd(outfile, sizeof(outfile));
+  if (dirname && dirname[0] != '\0'){
+    strcat(outfile, "/");
+    strcat(outfile, dirname);
+  }
+  strcat(outfile, "/");  
+  if (filename && filename[0] != '\0'){
+    strcat(outfile, filename);
+  } else {
+    strcat(outfile, NAME_CURRENT_COMP);
+  }
+
+  char logfile[PATH_MAX];
+  strcpy(logfile, outfile);
+  strcat(logfile, ".log");
+
+  int extra_args = hdf5_output ? 2 : 0;
+
+  // separate the options -- we need to count the number of spaces in the options string
+  char buffer[1000];
+  strcpy(buffer, options);
+  int n_spaces = 0;
+  for (int i=0; buffer[i] != '\0'; ++i) if (buffer[i] == ' ') ++n_spaces;
+  // allocate pointers for the new split arguments
+  char ** newargs = calloc(n_spaces + 2 + extra_args, sizeof(char*)); // [executable, option0, ... optionN, output-flag, output-directory]
+  // split and copy the strings
+  char * pch;
+  pch = strtok(buffer, " ");
+  int index = 1;
+  while (pch != NULL && index < n_spaces + 2 + extra_args) {
+    newargs[index] = calloc(strlen(pch), sizeof(char));
+    strcpy(newargs[index], pch);
+    index++;
+    pch = strtok(NULL, " ");
+  }
+  newargs[0] = receiver;
+  if (hdf5_output) {
+    newargs[n_spaces + 2] = "--dumptofile";
+    // combine the directoryname and filename;
+    if (dirname && dirname[0] != '\0'){
+      strcpy(buffer, dirname);
+      strcat(buffer, "/");
+    }
+    strcat(outfile, "_");
+    newargs[n_spaces + 3] = outfile;
+  }
+
+  if (1 || verbose) {
+    printf("Execute the call in this thread:\n\t");
+    for (int i=0; i<n_spaces + 2 + extra_args; ++i){
+      printf("%s ", newargs[i]);
+    }
+    printf("\n");
+  }
+
+
+  child_pid = fork();
+  if (0 == child_pid) {
+    // This *is* the child, setup stdout/stderr redirection
+    int child_fd = open(logfile, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    dup2(child_fd, 1); // redirect stdout to file
+    dup2(child_fd, 2); // redirect stderr to file
+    if (child_fd) close(child_fd); // dup'ed handles suffice for output at this point
+    // change the execution stack
+    char * envs[] = {NULL};
+    execve(newargs[0], newargs, envs);
+  }
+  sleep(1);
+} else {
+  child_pid = 0; // to avoid attempting to stop a non-existing process later
+}
+
+
 last_time = now_in_sec_88MHz();
 offset_time.hi = 0;
 offset_time.lo = 0;
@@ -152,27 +249,17 @@ repetition_time = efu_from_double(1/pulse_rate);
 printf("pulse rate set to %"PRIu32 " %"PRIu32"\n", repetition_time.hi, repetition_time.lo);
 
 bifrost_readout_setPulseTime(bifrost, last_time.hi, last_time.lo, last_time.hi, last_time.lo);
-
 %}
 
 TRACE
 %{
-// delay();
 now_time = now_in_sec_88MHz();
-/*
- * The EFU can not accept events which have decreasing event times?
- * One could try to implement a buffer that sorts event time to avoid this problem, but that seems complicated.
- * Instead, add the N*pulse-repetition-time to each event to (hopefully) avoid this issue.
-*/
-// offset_time = efu_add(offset_time, repetition_time);
-// now_time = efu_add(now_time, offset_time);
-
 // If the time difference exceeds the pulse-period, send the old packet, create a new one, and add the pulse times
 if (efu_compare(now_time, efu_add(last_time, repetition_time)) == 1) {
   efu_time_t r = now_in_sec_88MHz();
 
-  printf("Event_broadcaster=%s: Send packet, update time to (%"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32")\n",
-	       NAME_CURRENT_COMP, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
+//  printf("Event_broadcaster=%s: Send packet, update time to (%"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32")\n",
+//	       NAME_CURRENT_COMP, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
   if (broadcast){
 	  // TODO combine these three into a single 'flush' call?
 	  bifrost_readout_send(bifrost);
@@ -212,6 +299,27 @@ FINALLY
 // perform any teardown of the stateful broadcaster
 if (broadcast) bifrost_readout_send(bifrost);
 bifrost_readout_destroy(bifrost);
+
+if (child_pid && !pid_dead(child_pid)) {
+	printf("Event_broadcaster=%s: Stopping child with pid %d\n", NAME_CURRENT_COMP, child_pid);
+  // See if the child exists *and* we are allowed to ask the child to stop
+	int res = kill(child_pid, 0);
+	if (!res){ // no error, no-signal succeeded
+	  res = kill(child_pid, SIGINT);
+    sleep(2);
+    if (!pid_dead(child_pid)){
+		  res = kill(child_pid, SIGTERM);
+		  sleep(2);
+		}
+    if (!pid_dead(child_pid)){
+      res = kill(child_pid, SIGKILL);
+    }
+	}
+	if (!pid_dead(child_pid)) printf("Child with PID %d refuses to halt?\n", child_pid);
+
+}
+
+
 %}
 
 MCDISPLAY
