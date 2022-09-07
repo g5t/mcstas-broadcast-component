@@ -6,7 +6,15 @@ After installing [McStas 3.x](https://mcstas.org), compile and run the test inst
 mcrun broadcaster.instr -n 100 --no-output
 ```
 
-Compile the shared library with, e.g., 
+Compile the shared library with, e.g.,
 ```bash
 g++ -fpic -shared wrapper.cpp BifrostReadout.cpp -o libwrapper.so
+```
+
+## Build and run with cmake
+```bash
+mkdir build
+cd build
+cmake ..
+make runsim
 ```

@@ -201,10 +201,10 @@ uint16_t B = (uint16_t)int_B;
 efu_time_t efu_tof = efu_from_double(double_tof);
 efu_time_t event_time = efu_add(now_time, efu_tof);
 
-//printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", RING, FEN, TUBE, A, B, event_time.hi, event_time.lo);
+//printf("(%2u %2u %2u) %5u %5u %10u %10u -- Accumulated\n", 2 * RING, FEN, TUBE, A, B, event_time.hi, event_time.lo);
 
 // Send the event to the broadcaster to be accumulated and broadcast
-if (broadcast) bifrost_readout_add(bifrost, RING, FEN, event_time.hi, event_time.lo, TUBE, A, B);
+if (broadcast) bifrost_readout_add(bifrost, 2 * RING, FEN, event_time.hi, event_time.lo, TUBE, A, B);
 %}
 
 FINALLY

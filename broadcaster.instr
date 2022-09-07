@@ -48,6 +48,10 @@ WHEN !reuse AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
 COMPONENT Detector = PSD_monitor(nx=100, ny=100, filename="psd.dat", xwidth=0.1, yheight=0.1)
 WHEN !reuse AT (0,0,1) RELATIVE Source ROTATED (0,0,0) RELATIVE Source
 EXTEND %{
+// Interpretation of the digital identifiers RING, TUBE, FEN and amplitudes are
+// defined together with data format and a suggestion of the full instrument
+// configuration in the BIFROST ICD
+// https://project.esss.dk/owncloud/index.php/s/4M60TNdqkMcppUX
 if (SCATTERED) {
   RING = cassette / 3;
   TUBE = (cassette - 3*RING)*5 + analyzer;
