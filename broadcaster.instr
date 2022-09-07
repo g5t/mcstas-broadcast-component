@@ -69,7 +69,10 @@ AT (0,0,0) RELATIVE Origin ROTATED (0,0,0) RELATIVE Origin
 //COMPONENT to_events = Probability_to_Event(scale=2, mode="p")
 //WHEN !reuse AT (0,0,0.005) RELATIVE Detector ROTATED (0,0,0) RELATIVE Detector
 
-COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets)
+COMPONENT event_broadcaster = Event_broadcaster(ring="RING", fen="FEN", tube="TUBE", a="charge_A", b="charge_B", ip=sendTo, broadcast=sendPackets,
+  receiver="/home/g/Code/event-formation-unit/build/bin/efu",
+  options="--det /home/g/Code/event-formation-unit/build/modules/bifrost.so --nohwcheck"
+)
 // None of the AT ... matters as the broadcaster accepts all events which have made it this far through the instrument.
 AT(0,0,0) RELATIVE Detector ROTATED (0,0,0) RELATIVE Origin
 

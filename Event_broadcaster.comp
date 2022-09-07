@@ -10,7 +10,10 @@ string tof = "t",
 string ip = 0,
 int port = 9000,
 int broadcast = 1,
-pulse_rate = 14
+pulse_rate = 14,
+string receiver = 0,
+string options = 0,
+string filename = 0
 )
 OUTPUT PARAMETERS ()
 DEPENDENCY "-L. -Lbuild -lwrapper"
@@ -157,19 +160,66 @@ printf("pulse rate set to %"PRIu32 " %"PRIu32"\n", repetition_time.hi, repetitio
 
 bifrost_readout_setPulseTime(bifrost, last_time.hi, last_time.lo, 0, 0);
 
+  // separate the options -- we need to count the number of spaces in the options string
+  char buffer[1000];
+  strcpy(buffer, options);
+  int n_spaces = 0;
+  for (int i=0; buffer[i] != '\0'; ++i) if (buffer[i] == ' ') ++n_spaces;
+  // allocate pointers for the new split arguments
+  char ** newargs = calloc(n_spaces + 4, sizeof(char*)); // [executable, option0, ... optionN, output-flag, output-directory]
+  // split and copy the strings
+  char * pch;
+  pch = strtok(buffer, " ");
+  int index = 1;
+  while (pch != NULL && index < n_spaces + 4) {
+    newargs[index] = calloc(strlen(pch), sizeof(char));
+    strcpy(newargs[index], pch);
+    index++;
+    pch = strtok(NULL, " ");
+  }
+  newargs[0] = receiver;
+  newargs[n_spaces + 2] = "--dumptofile";
+  // combine the directoryname and filename;
+  if (dirname && dirname[0] != '\0'){
+    strcpy(buffer, dirname);
+    strcat(buffer, "/");
+  }
+  
+  char outfile[PATH_MAX];
+  getcwd(outfile, sizeof(outfile));
+  if (dirname && dirname[0] != '\0'){
+    strcat(outfile, "/");
+    strcat(outfile, dirname);
+  }
+  strcat(outfile, "/");  
+  if (filename && filename[0] != '\0'){
+    strcpy(outfile, filename);
+  } else {
+    strcpy(outfile, NAME_CURRENT_COMP);
+  }
+  strcat(outfile, "_");
+  newargs[n_spaces + 3] = outfile;
+  
+//  printf("Execute the call in this thread:\n\t");
+//  for (int i=0; i<n_spaces+4; ++i){
+//    printf("%s ", newargs[i]);
+//  }
+//  printf("\n");
+
+
 child_pid = fork();
 if (0 == child_pid) {
   // This *is* the child, change the execution stack
-	char * args[] = {NULL};
-	char * envs[] = {NULL};
-	execve("./waiter", args, envs);
+  char * envs[] = {NULL};
+  execve(newargs[0], newargs, envs);
 }
+sleep(10);
 
 %}
 
 TRACE
 %{
-delay();
+//delay();
 now_time = now_in_sec_88MHz();
 /*
  * The EFU can not accept events which have decreasing event times?
@@ -183,8 +233,8 @@ now_time = now_in_sec_88MHz();
 if (efu_compare(now_time, efu_add(last_time, repetition_time)) == 1) {
   efu_time_t r = now_in_sec_88MHz();
 
-  printf("Event_broadcaster=%s: Send packet, update time to (%"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32")\n",
-	       NAME_CURRENT_COMP, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
+//  printf("Event_broadcaster=%s: Send packet, update time to (%"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32")\n",
+//	       NAME_CURRENT_COMP, now_time.hi, now_time.lo, last_time.hi, last_time.lo);
   if (broadcast){
 	  // TODO combine these three into a single 'flush' call?
 	  bifrost_readout_send(bifrost);
